@@ -12,7 +12,7 @@ env:
 
 jobs:
   terraform:
-    name: "Unit Tests"
+    name: "Validations"
     runs-on: ubuntu-18.04
 
     steps:
