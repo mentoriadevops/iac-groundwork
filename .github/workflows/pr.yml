@@ -1,13 +1,7 @@
 name: "Terraform"
 
 on:
-  push:
-    branches:
-      - main
-
-env:
-  GOOGLE_APPLICATION_CREDENTIALS: ${{ secrets.GCP_KEY }}
-  GCP_PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
+  pull_request:
 
 jobs:
   validations:
@@ -36,16 +30,7 @@ jobs:
         id: validate
         run: terraform validate -no-color
       
-      - name: Set up Cloud SDK
-        uses: google-github-actions/setup-gcloud@master
-        with:
-          project_id: "direct-link-325016"
-          service_account_key: ${{ secrets.GCP_KEY }}
-          export_default_credentials: true
-
-      - name: Use gcloud CLI
-        run: gcloud info
-
-      - name: Terraform Plan
-        id: plan
-        run: terraform plan -no-color
+      - name: Validação do tfsec
+        id: tfsec
+        run: |
+          docker run --rm -v $PWD:/app -w /app tfsec/tfsec .
