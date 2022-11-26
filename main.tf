@@ -1,51 +1,67 @@
 provider "google" {
-  project = var.project
-  region  = var.region
+  project = "mentoria-iac-staging"
+  region  = "us-central1"
 }
 
-module "groundwork" {
-  source   = "github.com/mentoriaiac/iac-modulo-groundwork.git?ref=v0.1.0"
-  project  = var.project
-  vpc_name = "groundwork"
-  subnetworks = [
-    {
-      name          = "rede-us-central1"
-      ip_cidr_range = "10.0.0.0/16"
-      region        = "us-central1"
-    },
-    {
-      name          = "rede-us-west1"
-      ip_cidr_range = "10.10.0.0/16"
-      region        = "us-west1"
-    }
-  ]
-
-  firewall_allow = [
-    {
-      protocol = "tcp"
-      port     = [443, 80]
-    }
-  ]
+# VPC
+resource "google_compute_network" "groundwork" {
+  name                    = "groundwork"
+  auto_create_subnetworks = false
 }
 
-variable "project" {
-  description = "Nome do projeto (Default é staging)"
-  type        = string
-  default     = "direct-link-325016"
+# Subnets
+resource "google_compute_subnetwork" "load_balancer" {
+  name          = "load-balancer"
+  ip_cidr_range = "10.2.1.0/24"
+  network       = google_compute_network.groundwork.id
 }
 
-variable "region" {
-  description = "Nome da região"
-  type        = string
-  default     = "us-central1"
+resource "google_compute_subnetwork" "nomad" {
+  name          = "nomad"
+  ip_cidr_range = "10.2.2.0/24"
+  network       = google_compute_network.groundwork.id
 }
 
-output "vpc_id" {
-  description = "Retorna o id da VPC criada"
-  value       = module.groundwork.vpc_id
+# NAT
+resource "google_compute_router" "nat" {
+  name    = "groundwork"
+  network = google_compute_network.groundwork.id
 }
 
-output "subnets_id" {
-  description = "Retorna uma lista de objetos com os atributos das subnets criadas"
-  value       = module.groundwork.subnets_id
+resource "google_compute_router_nat" "nat" {
+  name                   = "groundwork-nat"
+  router                 = google_compute_router.nat.name
+  nat_ip_allocate_option = "AUTO_ONLY"
+
+  source_subnetwork_ip_ranges_to_nat = "LIST_OF_SUBNETWORKS"
+
+  subnetwork {
+    name                    = google_compute_subnetwork.nomad.id
+    source_ip_ranges_to_nat = ["ALL_IP_RANGES"]
+  }
+}
+
+# Firewall
+resource "google_compute_firewall" "allow_internal" {
+  name          = "allow-internal"
+  network       = google_compute_network.groundwork.name
+  source_ranges = ["10.2.0.0/22"]
+
+  # Define como prioridade baixa para permitir que outras regras sobreescrevam
+  # para casos mais específicos.
+  priority = 65534
+
+  allow {
+    protocol = "tcp"
+    ports    = ["0-65535"]
+  }
+
+  allow {
+    protocol = "udp"
+    ports    = ["0-65535"]
+  }
+
+  allow {
+    protocol = "icmp"
+  }
 }
